@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>All Borrows | Ram Protocol</title>
+</head>
+<body>
+  <form name="ram">
+    Account:
+    <input name="address" type="text" size="42" autofocus placeholder="0xPublicAddress" pattern="0x[0-9a-fA-F]{40}" />
+    <button type="submit">SEARCH</button>
+  </form>
+
+  <code><pre id="result"></pre></code>
+
+  <script type="module">
+    import { ethers } from "./lib/ethers-5.2.esm.min.js";
+
+    const ABI = {
+      Controller: JSON.parse(`[{"constant":true,"inputs":[],"name":"getAllMarkets","outputs":[{"internalType":"contractRToken[]","name":"","type":"address[]"}],"payable":false,"stateMutability":"view","type":"function"}]`),
+      RToken: JSON.parse(`[{"constant":false,"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"borrowBalanceCurrent","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"}]`),
+    }
+
+    const Contract = {
+      RamController: `0x0d4fe8832857Bb557d8CFCf3737cbFc8aE784106`,
+    }
+
+    const result = document.getElementById('result')
+
+    function clearResult() { result.innerHTML = '' }
+
+    const provider = new ethers.providers.JsonRpcProvider('https://mainnet-rpc.thundercore.com')
+    const ram = new ethers.Contract(Contract.RamController, ABI.Controller, provider)
+
+    document.forms.ram.addEventListener(
+      'submit',
+      async function(ev) {
+        ev.preventDefault()
+
+        clearResult()
+
+        const input = ev.target.address
+        const address = input.value.trim()
+
+        if (!ethers.utils.isAddress(address)) {
+          input.select()
+          return
+        }
+
+        result.innerText += `
+Querying ${address} all borrows in Ram Protocol...
+-----
+`
+
+        const markets = await ram.getAllMarkets()
+
+        result.innerText += `
+Found ${markets.length} markets in Ram
+-----
+`
+        const hasBorrow = []
+        for (const marketAddress of markets) {
+          const rToken = new ethers.Contract(marketAddress, ABI.RToken, provider)
+          const borrow = await rToken.callStatic.borrowBalanceCurrent(address)
+          const symbol = await rToken.symbol()
+
+          result.innerText += `
+# ${symbol} (${marketAddress}):
+
+Total borrow: ${borrow}
+-----
+`
+          if (borrow.gt(0)) hasBorrow.push(symbol)
+        }
+
+        result.innerText += `
+Borrows in markets: ${hasBorrow.map(r => r.replace(/^r/, '')).join(', ')}
+`
+      }
+    )
+  </script>
+</body>
+</html>
